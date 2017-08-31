@@ -71,6 +71,16 @@ vcf <- fread(cmd)
 vcf <- vcf[ complete.cases(vcf), ]
 vcf[,10:ncol(vcf)] <- as.data.frame(apply( vcf[,10:ncol(vcf)], MAR = c(1,2), FUN = round ))
 
+get_vcf_meta <- function(vcf){
+  # take a VCF and split out the meta data 
+  # to use for querying
+  vcf_meta <-  as.data.frame(str_split_fixed(vcf$ID, "\\.", 3), stringsAsFactors = FALSE)
+  vcf_meta$SNP_pos <- paste(vcf_meta$V2, vcf_meta$V3, sep = ":")
+  vcf_meta <- data.frame( SNP = vcf_meta$V1, SNP_pos = vcf_meta$SNP_pos, REF = vcf$REF, ALT = vcf$ALT, stringsAsFactors = FALSE)
+  return(vcf_meta)
+}
+vcf_meta <- get_vcf_meta(vcf)
+
 # PREPARE CLUSTERS
 
 sigClusters <- str_split_fixed(res[,1], ":",4)[,4]
@@ -80,6 +90,10 @@ keepClusters <- match(introns$clu,sigClusters)
 # remove non-significant clusters
 introns <- introns[ !is.na(keepClusters),]
 clusters <- clusters[ !is.na(keepClusters),]
+
+# rearrange sample columns in clusters so they match the VCF
+samples <- names(vcf)[10:ncol(vcf)]
+clusters <- clusters[, samples]
 
 #row.names(clusters) <- clusters$chrom; clusters$chrom <- NULL
 
@@ -324,12 +338,13 @@ resultsToPlot <- as.data.frame( select( resultsByCluster,
 row.names(resultsToPlot) <- resultsByCluster$clu
 resultsToPlot$q <- signif(resultsToPlot$q,  digits = 3)
 
-save.image("all_data.Rdata")
+save.image("../all_data.Rdata")
 print("saving objects")
 save( annotatedClusters, # every junction needed
       resultsToPlot, #significant clusters and the most significant SNP
       clusters, # junction counts for each sample
-      vcf, # the genotypes of each sample
+      vcf,
+      vcf_meta,# the genotypes of each sample
       #counts, 
       #meta, 
       exons_table, # the annotation
@@ -341,7 +356,7 @@ save( annotatedClusters, # every junction needed
       #sample_table,
       annotation_code,
       code,
-      file = paste0( "sQTL_results.Rdata")
+      file = paste0( "../sQTL_results.Rdata")
 )
 
 # to do - cut down size of exon table to increase speed of querying
