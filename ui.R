@@ -17,7 +17,10 @@ shinyUI(fluidPage(
         withSpinner(DT::dataTableOutput("all_clusters"))
       ),
       div(
-        withSpinner(plotOutput("select_cluster_plot", width = "100%") )
+        withSpinner(plotOutput("select_gene_plot",width="100%", height = "200px") )
+      ),
+      div(
+        withSpinner(plotOutput("select_cluster_plot", width = "100%", height = 600) )
       )
     #),
     

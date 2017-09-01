@@ -95,6 +95,7 @@ clusters <- clusters[ !is.na(keepClusters),]
 samples <- names(vcf)[10:ncol(vcf)]
 clusters <- clusters[, samples]
 
+introns_to_plot <- get_intron_meta(row.names(clusters))
 #row.names(clusters) <- clusters$chrom; clusters$chrom <- NULL
 
 ## if counts are fractions then split off just the numerator
@@ -341,10 +342,12 @@ resultsToPlot$q <- signif(resultsToPlot$q,  digits = 3)
 save.image("../all_data.Rdata")
 print("saving objects")
 save( annotatedClusters, # every junction needed
+      sigJunctions, # every junction x SNP interaction
       resultsToPlot, #significant clusters and the most significant SNP
       clusters, # junction counts for each sample
-      vcf,
-      vcf_meta,# the genotypes of each sample
+      vcf,# the genotypes of each sample
+      vcf_meta, # the vcf metadata
+      introns_to_plot, # all the intron positions
       #counts, 
       #meta, 
       exons_table, # the annotation

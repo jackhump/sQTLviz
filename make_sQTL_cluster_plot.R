@@ -51,7 +51,7 @@ make_sQTL_cluster_plot <- function(
   SNP_pos <- as.numeric(str_split_fixed(snp_pos, ":",2)[,2])
   
 
-  stopifnot(cluster_to_plot %in% cluster_ids)
+  #stopifnot(cluster_to_plot %in% cluster_ids)
   # create variables for later
   y <- t(counts[ cluster_ids==cluster_to_plot, ])
   #x <- numeric(nrow(y))+1
@@ -127,7 +127,7 @@ make_sQTL_cluster_plot <- function(
   ############## 
   # PLOT SETTINGS
   ###############
-  
+  min_proportion = 0.01 # if a junction's normalised proportion is less than this then don't plot!
   min_height=0
   max_height=0
   curv <- 0.1
@@ -206,6 +206,9 @@ make_sQTL_cluster_plot <- function(
       #edge$SIZE <- intron_meta$prop[i]+1 # make SIZE equal to the normalised count + 1
       #edge$SIZE <- as.factor(.bincode(intron_meta$prop[i]+0.1, breaks=seq(0,100,1)/100, include.lowest=TRUE))
       edge$verdict <- ifelse( intron_meta$verdict[i] == "annotated", yes = "annotated", no ="cryptic")
+      # if proportion = 0 then remove junction
+      edge <- edge[ edge$label > min_proportion, ]
+      
       edge
     })
 
@@ -240,56 +243,79 @@ make_sQTL_cluster_plot <- function(
       #edge$SIZE <- as.factor(.bincode(intron_meta$prop[i], breaks=seq(0,100,1)/100, include.lowest=TRUE))
       edge$SIZE <- intron_meta$prop[i]+1
       edge$verdict <- ifelse( intron_meta$verdict[i] == "annotated", yes = "annotated", no ="cryptic")
+      edge <- edge[ edge$label > min_proportion, ]
       edge
     })
+    print("allEdges:")
+    print(allEdges)
+    print("allEdgesP:")
+    print(allEdgesP)
 
     if ( all(is.na(main_title)) | !first_plot){
       new_theme_empty$plot.title <- element_blank()
     }
     first_plot <- FALSE
     
-    MAXcounts <- max(c(max(with(allEdgesP,1)),max(with(allEdges,1))))
+    #MAXcounts <- max(c(max(with(allEdgesP,1)),max(with(allEdges,1))))
     #YLIMN <- max(with(allEdgesP,end-start))
     #YLIMP <- max(with(allEdges,end-start))
     #print(is.numeric(allEdgesP$SIZE))
     #print(allEdges)
     #print(allEdgesP)
-
-    YLIMP <- max( allEdgesP$ytext) + 0.25 * max( allEdgesP$ytext)
-    YLIMN <- min( allEdges$ytext) + 0.25 * min( allEdges$ytext)
-
+    if( nrow(allEdgesP) == 0){
+      YLIMN <- min( allEdges$ytext) + 0.25 * min( allEdges$ytext)
+      YLIMP <- -YLIMN
+    }
+    if( nrow(allEdges) == 0 ){
+      YLIMP <- max( allEdgesP$ytext) + 0.25 * max( allEdgesP$ytext)
+      YLIMN <- -YLIMP
+    }
+    if( nrow(allEdges) > 0 & nrow(allEdgesP) > 0 ){
+      YLIMP <- max( allEdgesP$ytext) + 0.25 * max( allEdgesP$ytext)
+      YLIMN <- min( allEdges$ytext) + 0.25 * min( allEdges$ytext)
+    }
+    print( YLIMP)
+    print( YLIMN)
+    print(my_xlim)
     # print(allEdgesP)
     # print(allEdges)
     # if value is 0 then don't plot curve - no longer works due to superscript letters in labels
     #allEdgesP <- allEdgesP[ allEdgesP$label != 0, ]
     #allEdges <- allEdges[ allEdges$label != 0, ]
     # junction_colour if annotated? a different colour if not
-    g <- ggplot() +
-      geom_curve(data=allEdgesP, aes(x = start, xend = xtext, y = yOffset, yend = ytext, group = Group, colour = verdict, size = curveMax * (log10counts - 1)^curveExponent ),
+    g <- ggplot()
+      if(nrow(allEdgesP) > 0){
+        g <- g +
+        geom_curve(data=allEdgesP, aes(x = start, xend = xtext, y = yOffset, yend = ytext, group = Group, colour = verdict, size = curveMax * (log10counts - 1)^curveExponent ),
                  angle=90, curvature=-curv,lineend="round") +
-      geom_curve(data=allEdgesP, aes(x = xtext, xend = end, y = ytext, yend = yOffset, group = Group, colour = verdict, size = curveMax * (log10counts - 1)^curveExponent ),
-                 angle=90, curvature=-curv,lineend="round") +
-      geom_curve(data=allEdges, aes(x = start, xend = xtext, y = -yOffset, yend = ytext, group = Group, colour = verdict, size = curveMax * (log10counts - 1)^curveExponent ),
+        geom_curve(data=allEdgesP, aes(x = xtext, xend = end, y = ytext, yend = yOffset, group = Group, colour = verdict, size = curveMax * (log10counts - 1)^curveExponent ),
+                 angle=90, curvature=-curv,lineend="round")
+      }
+      if(nrow(allEdges) > 0){
+        g <- g + geom_curve(data=allEdges, aes(x = start, xend = xtext, y = -yOffset, yend = ytext, group = Group, colour = verdict, size = curveMax * (log10counts - 1)^curveExponent ),
                  angle=90,curvature=curv,lineend="round") +
-      geom_curve(data=allEdges, aes(x = xtext, xend = end, y = ytext, yend = -yOffset, group = Group, colour = verdict, size = curveMax * (log10counts - 1)^curveExponent ),
-                 angle=90,curvature=curv,lineend="round") +
-      
-    new_theme_empty +
+           geom_curve(data=allEdges, aes(x = xtext, xend = end, y = ytext, yend = -yOffset, group = Group, colour = verdict, size = curveMax * (log10counts - 1)^curveExponent ),
+                 angle=90,curvature=curv,lineend="round")
+      }
+    g <- g + new_theme_empty +
       # make the y axis label the group
       ylab(paste0(groups[fancyVar]," (n=",group_sample_size,")")) +
       xlab("") +
       xlim(my_xlim) +
-      # try titling instead - why doesn't this work?
-      ggtitle(paste0(groups[fancyVar]," (n=",group_sample_size,")" ) ) +
-
       # horizontal line - smooth out the ends of the curves
       geom_hline(yintercept=0, size = centreLineWidth, colour = "white") +
-      geom_hline(yintercept=0,alpha=.9, size=1) +
+      geom_hline(yintercept=0,alpha=.9, size=1)
 
       # label the junctions
-      geom_label(data=allEdgesP,aes(x=xtext,y=0.95*ytext,label=label), size = labelTextSize, label.size = NA, parse=TRUE, fill = "white",colour = "black", label.r = unit(0.3,"lines"), label.padding = unit(0.3,"lines") ) +
-      geom_label(data=allEdges,aes(x=xtext,y=0.95*ytext,label=label), size= labelTextSize, label.size = NA, parse=TRUE, fill = "white", colour = "black", label.r = unit(0.3,"lines"), label.padding = unit(0.3,"lines") ) +
-      #
+      if( nrow(allEdgesP) > 0 ){
+          g <- g + geom_label(data=allEdgesP,aes(x=xtext,y=0.95*ytext,label=label), size = labelTextSize, label.size = NA, parse=TRUE, fill = "white",
+                              colour = "black", label.r = unit(0.3,"lines"), label.padding = unit(0.3,"lines") )
+      }
+      if( nrow(allEdges) > 0 ){
+          g <- g + geom_label(data=allEdges,aes(x=xtext,y=0.95*ytext,label=label), size= labelTextSize, label.size = NA, parse=TRUE, fill = "white", 
+                             colour = "black", label.r = unit(0.3,"lines"), label.padding = unit(0.3,"lines") ) 
+      }
+      g <- g +
       ylim(YLIMN,YLIMP) +
       scale_size_continuous(limits=c(0,10),guide='none')
     # is this used for anything? color is currently set to clu which doesn't change for each junction
@@ -471,19 +497,22 @@ make_sQTL_cluster_plot <- function(
                             yend=0,
                             label = snp )
       for (i in 1:length(plots) ){ 
-        plots[[i]] <- plots[[i]] +  geom_segment(data=SNP_df,aes(x=x,y=y,xend=xend,yend=yend, colour = label), size = 6.5 ) #+geom_vline(xintercept=snp_coord)
+        plots[[i]] <- plots[[i]] +  
+          geom_segment(data=SNP_df,aes(x=x,y=y,xend=xend,yend=yend, colour = label), size = 6.5 ) +
+          scale_colour_manual("", values = mainPalette ) #+geom_vline(xintercept=snp_coord)
     }
-    
-    plots[[1]] <- plots[[1]] + 
-      scale_colour_manual("", values = mainPalette ) + guides(colour=FALSE) # don't show colour legend in top plot
-    plots[[2]] <- plots[[2]] + 
-      scale_colour_manual("", values = mainPalette ) + guides(colour=FALSE) # don't show colour legend in top plot
-    plots[[3]] <- plots[[3]] +
-      scale_colour_manual("", values = mainPalette ) + theme(legend.position="bottom", legend.justification = 'right') 
-  
-    gridExtra::grid.arrange( plots[[1]], plots[[2]], plots[[3]], ncol =1)
-    
-    
+    for (i in 1:( length(plots) - 1) ){
+    plots[[i]] <- plots[[i]] + 
+      guides(colour=FALSE) 
+    }
+    plots[[length(plots)]] <- plots[[length(plots)]] + 
+      theme(legend.position="bottom", legend.justification = 'right') 
+    if( length( plots ) == 2){
+    gridExtra::grid.arrange( plots[[1]], plots[[2]], ncol =1)
+    }
+    if( length( plots ) == 3){
+      gridExtra::grid.arrange( plots[[1]], plots[[2]], plots[[3]], ncol =1)
+    }
   }
 
   }
