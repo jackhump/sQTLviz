@@ -299,7 +299,8 @@ make_sQTL_cluster_plot <- function(
       }
     g <- g + new_theme_empty +
       # make the y axis label the group
-      ylab(paste0(groups[fancyVar]," (n=",group_sample_size,")")) +
+      #ylab(paste0(groups[fancyVar]," (n=",group_sample_size,")")) +
+      ylab(paste0(names(group_names)[fancyVar]," (n=",group_sample_size,")")) +
       xlab("") +
       xlim(my_xlim) +
       # horizontal line - smooth out the ends of the curves

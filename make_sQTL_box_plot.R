@@ -1,23 +1,27 @@
-sel <- 2
-make_sQTL_box_plot(cluster_to_plot = row.names(resultsToPlot)[sel],
-                   all_junctions = sigJunctions,
-                   junction_to_plot = 
-                   main_title = "test",
-                   vcf=vcf,
-                   vcf_meta=vcf_meta,
-                   exons_table = exons_table,
-                   counts = clusters,
-                   introns = annotatedClusters,
-                   cluster_ids = annotatedClusters$clusterID,
-                   snp_pos = resultsToPlot[sel,]$SNP_pos,
-                   snp = resultsToPlot[sel,]$SNP )
-
+# sel <- 1
+# cluster_to_plot = row.names(resultsToPlot)[sel]
+# # get lowest p value junction in cluster to start
+# all_junctions = sigJunctions
+# junction_to_plot= all_junctions[all_junctions$clu==cluster_to_plot,]
+# junction_to_plot = junction_to_plot[ which( junction_to_plot$bpval == min(junction_to_plot$bpval) ), ]$pid
+#                    main_title = "test"
+#                    vcf=vcf
+#                    vcf_meta=vcf_meta
+#                    exons_table = exons_table
+#                    counts = clusters
+#                    introns = annotatedClusters
+#                    cluster_ids = annotatedClusters$clusterID
+#                    snp_pos = resultsToPlot[sel,]$SNP_pos
+#                    snp = resultsToPlot[sel,]$SNP
+# 
+#                    
 
 
 
 #' Make genotype x junction count box plots
 #'
 #' @import ggplot2
+#' @import ggbeeswarm
 #' @export
 make_sQTL_box_plot <- function(
   cluster_to_plot,
@@ -33,6 +37,48 @@ make_sQTL_box_plot <- function(
   snp_pos=NA,
   snp = snp ){
   
+  stopifnot( snp %in% vcf_meta$SNP ) 
   
+  # sometimes chr is missing
+  if( !grepl("^chr", junction_to_plot)){
+    junction_to_plot <- paste0("chr", junction_to_plot)
+  }
+  
+  # subset VCF and get genotype groups
+  vcfIndex <- which( vcf_meta$SNP == snp)
+  VCF <- vcf[vcfIndex,10:ncol(vcf)]
+  #table(t(VCF) )
+  #for testing!
+  VCF_meta <- vcf_meta[vcfIndex,]
+  meta <- as.data.frame(t(VCF))
+  meta$group=as.factor(meta$V1)
+  group_names <- c(0,1,2)
+  names(group_names) <- c(
+    paste0( VCF_meta$REF, "/", VCF_meta$REF),
+    paste0( VCF_meta$REF, "/", VCF_meta$ALT),
+    paste0( VCF_meta$ALT, "/", VCF_meta$ALT)
+  )
+  
+  #print(group_names)
+  y <- t(counts[ cluster_ids==cluster_to_plot, ])
+  # for each sample divide each junction count by the total for that sample
+  normalisedCounts <- as.data.frame(sweep(y, 1, rowSums(y), "/"))
+  
+  genotypes <- as.data.frame(t(VCF))
+  
+  normalisedCounts$genotypeCode <- genotypes$V1[ match( row.names(normalisedCounts), row.names(genotypes))] 
+  normalisedCounts <- normalisedCounts[ complete.cases(normalisedCounts),]
+  
+  normalisedCounts$genotype <- names(group_names)[ match(normalisedCounts$genotypeCode, group_names)]
+  toPlot <- select( normalisedCounts, junction = junction_to_plot, geno =  "genotype")
+  toPlot$geno <- factor(toPlot$geno, levels = rev(names(group_names)))
+  plot <- ggplot( data = toPlot, aes(x = geno, y = junction, group = geno ) ) + 
+    geom_boxplot(outlier.colour = NA, fill = "firebrick") +
+    geom_quasirandom(size = 0.8) + coord_flip() +
+    theme_classic() +
+    ylab("junction contribution to cluster") +
+    xlab("") 
+      
+  return(plot)
 }
   

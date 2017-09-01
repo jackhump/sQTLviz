@@ -9,24 +9,29 @@ shinyUI(fluidPage(
   
   # Application title
   titlePanel("sQTLviz"),
-  
-  # Sidebar with a slider input for number of bins 
-  # sidebarLayout(
-  #   sidebarPanel(
-      div(
-        withSpinner(DT::dataTableOutput("all_clusters"))
-      ),
-      div(
-        withSpinner(plotOutput("select_gene_plot",width="100%", height = "200px") )
-      ),
-      div(
-        withSpinner(plotOutput("select_cluster_plot", width = "100%", height = 600) )
+    fluidRow(
+      column(8,offset=2,
+        div(
+          DT::dataTableOutput("all_clusters")
+        )
       )
-    #),
-    
-    # Show a plot of the generated distribution
-    #mainPanel(
-    #   plotOutput("distPlot")
-    #)
-  #)
+    ),
+    withSpinner(div(
+      div(
+        plotOutput("select_gene_plot",width="100%", height = "200px") 
+      ),
+      fluidRow(
+        column(7, offset = 1,
+          div(
+           plotOutput("select_cluster_plot", width = "100%", height = 400) 
+          )
+        ),
+        column(3,
+          div(
+            plotOutput("select_box_plot", width = "100%", height = 400)
+          )
+        )
+      )
+    ), type = 8
+  )
 ))

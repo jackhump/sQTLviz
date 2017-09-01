@@ -339,7 +339,7 @@ resultsToPlot <- as.data.frame( select( resultsByCluster,
 row.names(resultsToPlot) <- resultsByCluster$clu
 resultsToPlot$q <- signif(resultsToPlot$q,  digits = 3)
 
-save.image("../all_data.Rdata")
+save.image("data/all_data.Rdata")
 print("saving objects")
 save( annotatedClusters, # every junction needed
       sigJunctions, # every junction x SNP interaction
@@ -359,7 +359,7 @@ save( annotatedClusters, # every junction needed
       #sample_table,
       annotation_code,
       code,
-      file = paste0( "../sQTL_results.Rdata")
+      file = paste0( "data/sQTL_results.Rdata")
 )
 
 # to do - cut down size of exon table to increase speed of querying

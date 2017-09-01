@@ -1,4 +1,3 @@
-
 library(shiny)
 library(dplyr)
 library(ggplot2)
@@ -12,16 +11,18 @@ library(shinycssloaders)
 # library(grid)
 # library(gtable)
 # library(ggrepel)
+library(ggbeeswarm)
 
 if (!exists("introns")){
-  load("../sQTL_results.Rdata")
+  load("sQTL_results.Rdata")
   defaultValue <- 1
 }else{
   defaultValue <- NULL
 }
 
 source("make_sQTL_cluster_plot.R")
- #sel <- 2
+source("make_sQTL_gene_plot.R")
+# sel <- 18
 # make_sQTL_cluster_plot( row.names(resultsToPlot)[sel],
 #                    main_title = "test",
 #                    vcf=vcf,
@@ -33,7 +34,7 @@ source("make_sQTL_cluster_plot.R")
 #                    snp_pos = resultsToPlot[sel,]$SNP_pos,
 #                    snp = resultsToPlot[sel,]$SNP )
 
-source("/Users/Jack/google_drive/Work/PhD_Year_3/leafcutter/leafcutter/R/make_gene_plot.R")
+#source("/Users/Jack/google_drive/Work/PhD_Year_3/leafcutter/leafcutter/R/make_gene_plot.R")
 # sel <- 1
 # make_gene_plot(resultsToPlot[sel,]$gene,
 #                counts = clusters,
@@ -45,6 +46,24 @@ source("/Users/Jack/google_drive/Work/PhD_Year_3/leafcutter/leafcutter/R/make_ge
 #                snp_pos = resultsToPlot[sel,]$SNP_pos,
 #                snp = resultsToPlot[sel,]$SNP
 # )
+
+source("make_sQTL_box_plot.R")
+sel <- 19
+junction_to_plot <- sigJunctions[ sigJunctions$clu == row.names(resultsToPlot)[sel], ]
+junction_to_plot <- junction_to_plot[ which( junction_to_plot$bpval == min(junction_to_plot$bpval) ), ]$pid
+make_sQTL_box_plot(
+    cluster_to_plot =  row.names(resultsToPlot)[sel],
+    junction_to_plot = junction_to_plot,
+    all_junctions = all_junctions,
+    main_title = NA,
+    vcf = vcf,
+    vcf_meta = vcf_meta,
+    exons_table = exons_table,
+    counts = clusters,
+    introns = annotatedClusters,
+    cluster_ids = annotatedClusters$clusterID,
+    snp_pos = resultsToPlot[sel,]$SNP_pos,
+    snp = resultsToPlot[sel,]$SNP )
 
 # Define server logic required to draw a histogram
 shinyServer(function(input, output) {
@@ -130,6 +149,28 @@ shinyServer(function(input, output) {
     )
   })
 
-
+  # BOX PLOTS OF GENOTYPE AGAINST NORMALISED JUNCTION COUNTS
+  
+  output$select_box_plot <- renderPlot({
+    junction_to_plot <- sigJunctions[sigJunctions$clu == mydata()$clusterID,]
+    junction_to_plot <- junction_to_plot[ which( junction_to_plot$bpval == min(junction_to_plot$bpval) ), ]$pid
+    #plotTitle <- c(mydata()$gene, as.character(mydata()$clusterID) )
+    suppressWarnings( print(
+      make_sQTL_box_plot(
+        cluster_to_plot =  mydata()$clusterID,
+        junction_to_plot = junction_to_plot,
+        all_junctions = all_junctions,
+        main_title = NA,
+        vcf = vcf,
+        vcf_meta = vcf_meta,
+        exons_table = exons_table,
+        counts = clusters,
+        introns = annotatedClusters,
+        cluster_ids = annotatedClusters$clusterID,
+        snp_pos = mydata()$SNP_pos,
+        snp = mydata()$SNP )
+    ))
+  }, width = "auto", height = "auto",  res = 90
+  )
   
 })
