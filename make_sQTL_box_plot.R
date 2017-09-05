@@ -73,9 +73,10 @@ make_sQTL_box_plot <- function(
   toPlot <- select( normalisedCounts, junction = junction_to_plot, geno =  "genotype")
   toPlot$geno <- factor(toPlot$geno, levels = rev(names(group_names)))
   plot <- ggplot( data = toPlot, aes(x = geno, y = junction, group = geno ) ) + 
-    geom_boxplot(outlier.colour = NA, fill = "firebrick") +
-    geom_quasirandom(size = 0.8) + coord_flip() +
+    geom_boxplot(outlier.colour = NA, fill = "orange") +
+    geom_quasirandom(size = 0.8) + #coord_flip() +
     theme_classic() +
+    theme(axis.title.y = element_text( angle = 90 ) ) +
     ylab("junction contribution to cluster") +
     xlab("") 
       

@@ -5,13 +5,14 @@ library(DT)
 library(leafcutter)
 library(reshape2)
 library(gridExtra)
-# library(intervals) # needed for pretty strand arrow placement
-# library(foreach)
+library(intervals) # needed for pretty strand arrow placement
+library(foreach)
 library(shinycssloaders)
-# library(grid)
-# library(gtable)
-# library(ggrepel)
+library(grid)
+library(gtable)
+library(ggrepel)
 library(ggbeeswarm)
+library(stringr)
 
 if (!exists("introns")){
   load("sQTL_results.Rdata")
@@ -22,7 +23,11 @@ if (!exists("introns")){
 
 source("make_sQTL_cluster_plot.R")
 source("make_sQTL_gene_plot.R")
-# sel <- 18
+#source("/Users/Jack/google_drive/Work/PhD_Year_3/leafcutter/leafcutter/R/make_gene_plot.R")
+source("make_sQTL_box_plot.R")
+# sel <- 5
+# junction_to_plot <- sigJunctions[ sigJunctions$clu == row.names(resultsToPlot)[sel], ]
+# sigJunction <- junction_to_plot[ which( junction_to_plot$bpval == min(junction_to_plot$bpval) ), ]$pid
 # make_sQTL_cluster_plot( row.names(resultsToPlot)[sel],
 #                    main_title = "test",
 #                    vcf=vcf,
@@ -32,10 +37,14 @@ source("make_sQTL_gene_plot.R")
 #                    introns = annotatedClusters,
 #                    cluster_ids = annotatedClusters$clusterID,
 #                    snp_pos = resultsToPlot[sel,]$SNP_pos,
-#                    snp = resultsToPlot[sel,]$SNP )
+#                    snp = resultsToPlot[sel,]$SNP,
+#                    sigJunction = sigJunction )
+
+# current issue - SNP coord is 0 - how wide to make it?
 
 #source("/Users/Jack/google_drive/Work/PhD_Year_3/leafcutter/leafcutter/R/make_gene_plot.R")
-# sel <- 1
+#source("make_sQTL_gene_plot.R")
+# sel <- 2
 # make_gene_plot(resultsToPlot[sel,]$gene,
 #                counts = clusters,
 #                introns = annotatedClusters,
@@ -47,25 +56,25 @@ source("make_sQTL_gene_plot.R")
 #                snp = resultsToPlot[sel,]$SNP
 # )
 
-source("make_sQTL_box_plot.R")
-sel <- 19
-junction_to_plot <- sigJunctions[ sigJunctions$clu == row.names(resultsToPlot)[sel], ]
-junction_to_plot <- junction_to_plot[ which( junction_to_plot$bpval == min(junction_to_plot$bpval) ), ]$pid
-make_sQTL_box_plot(
-    cluster_to_plot =  row.names(resultsToPlot)[sel],
-    junction_to_plot = junction_to_plot,
-    all_junctions = all_junctions,
-    main_title = NA,
-    vcf = vcf,
-    vcf_meta = vcf_meta,
-    exons_table = exons_table,
-    counts = clusters,
-    introns = annotatedClusters,
-    cluster_ids = annotatedClusters$clusterID,
-    snp_pos = resultsToPlot[sel,]$SNP_pos,
-    snp = resultsToPlot[sel,]$SNP )
-
-# Define server logic required to draw a histogram
+# 
+# sel <- 19
+# junction_to_plot <- sigJunctions[ sigJunctions$clu == row.names(resultsToPlot)[sel], ]
+# junction_to_plot <- junction_to_plot[ which( junction_to_plot$bpval == min(junction_to_plot$bpval) ), ]$pid
+# make_sQTL_box_plot(
+#     cluster_to_plot =  row.names(resultsToPlot)[sel],
+#     junction_to_plot = junction_to_plot,
+#     all_junctions = all_junctions,
+#     main_title = NA,
+#     vcf = vcf,
+#     vcf_meta = vcf_meta,
+#     exons_table = exons_table,
+#     counts = clusters,
+#     introns = annotatedClusters,
+#     cluster_ids = annotatedClusters$clusterID,
+#     snp_pos = resultsToPlot[sel,]$SNP_pos,
+#     snp = resultsToPlot[sel,]$SNP )
+# 
+# # Define server logic required to draw a histogram
 shinyServer(function(input, output) {
 
   # ALL CLUSTER X SNP TABLE
@@ -106,8 +115,11 @@ shinyServer(function(input, output) {
     #width <- getGeneLength(gene)
     clusterID <- row.names(resultsToPlot)[sel]
     print(clusterID)
-    cluster_pos <- clusters[ sel, ]$cluster_pos
-    return(list(gene = gene, SNP=SNP, SNP_pos=SNP_pos, cluster_pos = cluster_pos, clusterID = clusterID, width = "auto") )
+    cluster_pos <- resultsToPlot[ sel, ]$cluster_pos
+    # get the most significant junction in the selected cluster
+    junction <- sigJunctions[ sigJunctions$clu == row.names(resultsToPlot)[sel], ]
+    junction <- junction[ which( junction$bpval == min(junction$bpval) ), ]$pid
+    return(list(gene = gene, SNP=SNP, SNP_pos=SNP_pos, cluster_pos = cluster_pos, clusterID = clusterID, width = "auto", junction=junction) )
   })
   
   # PLOTTING
@@ -125,7 +137,8 @@ shinyServer(function(input, output) {
                          introns = annotatedClusters,
                          cluster_ids = annotatedClusters$clusterID,
                          snp_pos = mydata()$SNP_pos,
-                         snp = mydata()$SNP )
+                         snp = mydata()$SNP,
+                         sigJunction = mydata()$junction)
     ))
   }, width = "auto", height = "auto",  res = 60
   )
@@ -152,13 +165,11 @@ shinyServer(function(input, output) {
   # BOX PLOTS OF GENOTYPE AGAINST NORMALISED JUNCTION COUNTS
   
   output$select_box_plot <- renderPlot({
-    junction_to_plot <- sigJunctions[sigJunctions$clu == mydata()$clusterID,]
-    junction_to_plot <- junction_to_plot[ which( junction_to_plot$bpval == min(junction_to_plot$bpval) ), ]$pid
     #plotTitle <- c(mydata()$gene, as.character(mydata()$clusterID) )
     suppressWarnings( print(
       make_sQTL_box_plot(
         cluster_to_plot =  mydata()$clusterID,
-        junction_to_plot = junction_to_plot,
+        junction_to_plot = mydata()$junction,
         all_junctions = all_junctions,
         main_title = NA,
         vcf = vcf,
@@ -172,5 +183,17 @@ shinyServer(function(input, output) {
     ))
   }, width = "auto", height = "auto",  res = 90
   )
+  
+  # VIEW CLUSTER IN UCSC
+  
+  output$view_cluster_UCSC <- renderUI({
+    coord <- mydata()$cluster_pos
+    print("coord:")
+    print(coord)
+    snp <- mydata()$SNP
+    url <- paste0( "http://genome.ucsc.edu/cgi-bin/hgTracks?&org=human&db=hg19&position=", 
+                   coord,"&hgFind.matches=", snp  )
+  return(tags$a(href = url, "view on UCSC", target = "_blank", class = "btn btn_default", id = "UCSC" ) )
+  })
   
 })

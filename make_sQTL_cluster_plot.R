@@ -1,4 +1,4 @@
-
+# 
 # cluster_to_plot = "clu_34225"
 #                    main_title = "CAST"
 #                    vcf=vcf
@@ -6,7 +6,7 @@
 #                    exons_table = exons_table
 #                    counts = clusters
 #                    introns = annotatedClusters
-#                    cluster_ids = introns$clusterID
+#                    cluster_ids = annotatedClusters$clusterID
 #                    snp_pos = "chr5:96076487"
 #                    snp = "rs7724759"
 
@@ -25,6 +25,7 @@ make_sQTL_cluster_plot <- function(
   counts = NULL,
   introns = NULL,
   snp_pos=NA,
+  sigJunction=NA,
   snp = snp ){
   
   if( is.null(cluster_to_plot)){
@@ -40,7 +41,7 @@ make_sQTL_cluster_plot <- function(
   #for testing!
   VCF_meta <- vcf_meta[vcfIndex,]
   meta <- as.data.frame(t(VCF))
-  meta$group=as.factor(meta$V1)
+  meta$group=as.factor(meta[,1])
   group_names <- c(0,1,2)
   names(group_names) <- c(
       paste0( VCF_meta$REF, "/", VCF_meta$REF),
@@ -123,7 +124,7 @@ make_sQTL_cluster_plot <- function(
   total_length=sum(trans_d) # ==max(coords)
   my_xlim=c(-.05*total_length,1.05*total_length)
   first_plot <- TRUE
-
+  
   ############## 
   # PLOT SETTINGS
   ###############
@@ -132,6 +133,7 @@ make_sQTL_cluster_plot <- function(
   max_height=0
   curv <- 0.1
   min_exon_length <- 0.5
+  divider_length <- 0.05 # the white spacers to divide overlapping exons
   maxratio=0
   minratio=1.0
   yFactor = 0.65   # originally set as 0.65
@@ -152,6 +154,10 @@ make_sQTL_cluster_plot <- function(
   # sweep is dividing each entry in each row by the sum of all entries in that row and then apply is finding the mean value of each column
   summary_func <- function(a) apply( sweep(a,1,rowSums(a),"/"),2, function(g) mean(g, na.rm=T) ) 
 
+  if( !is.na(sigJunction)){
+    sig.junction <- str_split_fixed(sigJunction,":",4)[1,]
+  }
+  
   plots <- foreach (tis=groups) %do% {
     # print(y[tiss=x,,drop=F])
     intron_meta$counts=summary_func(y[ tis==x,,drop=FALSE])
@@ -206,8 +212,12 @@ make_sQTL_cluster_plot <- function(
       #edge$SIZE <- intron_meta$prop[i]+1 # make SIZE equal to the normalised count + 1
       #edge$SIZE <- as.factor(.bincode(intron_meta$prop[i]+0.1, breaks=seq(0,100,1)/100, include.lowest=TRUE))
       edge$verdict <- ifelse( intron_meta$verdict[i] == "annotated", yes = "annotated", no ="cryptic")
+      # if matches sigJunction
+      edge$embolden <- paste(edge$startv, edge$endv) == paste(sig.junction[2], sig.junction[3])
+      
+      
       # if proportion = 0 then remove junction
-      edge <- edge[ edge$label > min_proportion, ]
+      edge <- edge[ edge$label > min_proportion | edge$embolden, ]
       
       edge
     })
@@ -243,7 +253,9 @@ make_sQTL_cluster_plot <- function(
       #edge$SIZE <- as.factor(.bincode(intron_meta$prop[i], breaks=seq(0,100,1)/100, include.lowest=TRUE))
       edge$SIZE <- intron_meta$prop[i]+1
       edge$verdict <- ifelse( intron_meta$verdict[i] == "annotated", yes = "annotated", no ="cryptic")
-      edge <- edge[ edge$label > min_proportion, ]
+      edge$embolden <- paste(edge$startv, edge$endv) == paste(sig.junction[2], sig.junction[3])
+      
+      edge <- edge[ edge$label > min_proportion | edge$embolden, ]
       edge
     })
     print("allEdges:")
@@ -300,7 +312,8 @@ make_sQTL_cluster_plot <- function(
     g <- g + new_theme_empty +
       # make the y axis label the group
       #ylab(paste0(groups[fancyVar]," (n=",group_sample_size,")")) +
-      ylab(paste0(names(group_names)[fancyVar]," (n=",group_sample_size,")")) +
+      ylab(paste0("\n",names(group_names)[fancyVar],"\n(n=",group_sample_size,")")) +
+      theme(axis.title.y = element_text( angle = 0, vjust = 0.75 )) +
       xlab("") +
       xlim(my_xlim) +
       # horizontal line - smooth out the ends of the curves
@@ -309,13 +322,27 @@ make_sQTL_cluster_plot <- function(
 
       # label the junctions
       if( nrow(allEdgesP) > 0 ){
-          g <- g + geom_label(data=allEdgesP,aes(x=xtext,y=0.95*ytext,label=label), size = labelTextSize, label.size = NA, parse=TRUE, fill = "white",
-                              colour = "black", label.r = unit(0.3,"lines"), label.padding = unit(0.3,"lines") )
-      }
+          g <- g + geom_label(data=allEdgesP,aes(x=xtext,y=0.95*ytext,label=label), size = labelTextSize, 
+                              label.size = NA, parse=TRUE, fill = "white",
+                              colour = "black", label.r = unit(0.3,"lines"), label.padding = unit(0.3,"lines") ) 
+                }
       if( nrow(allEdges) > 0 ){
           g <- g + geom_label(data=allEdges,aes(x=xtext,y=0.95*ytext,label=label), size= labelTextSize, label.size = NA, parse=TRUE, fill = "white", 
                              colour = "black", label.r = unit(0.3,"lines"), label.padding = unit(0.3,"lines") ) 
+          
       }
+      
+      if( !is.na(sigJunction) ){
+        if(nrow(allEdges[allEdges$embolden,]) > 0){
+          g <- g + geom_label(data=allEdges[allEdges$embolden,],aes(x=xtext,y=0.95*ytext,label=label), fontface = "bold", size= labelTextSize, label.size = NA, parse=FALSE, fill = "white", 
+                                colour = "black", label.r = unit(0.3,"lines"), label.padding = unit(0.3,"lines") ) 
+        }
+        if( nrow(allEdges[allEdgesP$embolden,]) > 0){
+          g <- g + geom_label(data=allEdgesP[allEdgesP$embolden,],aes(x=xtext,y=0.95*ytext,label=label), fontface="bold", size = labelTextSize, label.size = NA, parse=FALSE, fill = "white",
+                     colour = "black", label.r = unit(0.3,"lines"), label.padding = unit(0.3,"lines") )
+        }
+      }
+    
       g <- g +
       ylim(YLIMN,YLIMP) +
       scale_size_continuous(limits=c(0,10),guide='none')
@@ -343,14 +370,14 @@ make_sQTL_cluster_plot <- function(
     stopifnot( nrow(exons_chr) > 0)
     
     exons_here <- exons_chr[ ( min(s) <= exons_chr$start & exons_chr$start <= max(s) ) | ( min(s) <= exons_chr$end & exons_chr$end <= max(s) ), ] # find exons
-
+    print(exons_here)
     # if exons found - remove exons that don't actually start or end with a junction
     # and any repeated exons or any exons larger than 500bp
     if( nrow(exons_here) > 0 ){ 
       exons_here <-  unique( 
         exons_here[ ( exons_here$end %in% intron_meta$start | 
                         exons_here$start %in% intron_meta$end ) &
-                      ( exons_here$end - exons_here$start <= 500 |
+                      ( exons_here$end - exons_here$start <= 1000 |
                         exons_here$end == min(intron_meta$start) |
                         exons_here$start == max(intron_meta$end) ), ]
       )
@@ -459,11 +486,12 @@ make_sQTL_cluster_plot <- function(
       for (i in 1:length(plots) ){ 
         plots[[i]] <- plots[[i]] +
           geom_segment( data=exon_df, aes(x=x,y=y,xend=xend,yend=yend, colour = label), alpha=1, size=6) +
-          geom_segment( data = exon_df, aes(x = x, xend = x+0.01, y = y, yend = yend), colour = "white", size = 6, alpha = 1) +
-          geom_segment( data = exon_df, aes(x = xend-0.01, xend=xend, y = y, yend = yend), colour = "white", size = 6, alpha = 1)
+          geom_segment( data = exon_df, aes(x = x, xend = x+divider_length, y = y, yend = yend), colour = "white", size = 6, alpha = 1) +
+          geom_segment( data = exon_df, aes(x = xend-divider_length, xend=xend, y = y, yend = yend), colour = "white", size = 6, alpha = 1)
       }
     }
   }
+  
 
   # TITLE
   
@@ -492,28 +520,85 @@ make_sQTL_cluster_plot <- function(
     
     gridExtra::grid.arrange( plots[[1]], plots[[2]], ncol =1)
   }else{
-      SNP_df <- data.frame( x=snp_coord - (0.01 * snp_coord),
-                            xend=snp_coord + (0.01*snp_coord),
+      # sQTL specific options
+    
+      SNP_df <- data.frame( x=snp_coord,
+                            xend=snp_coord + (0.005*snp_coord),
                             y=0,
                             yend=0,
                             label = snp )
+      if(snp_coord == 0){
+        SNP_df$x <- 0
+        SNP_df$xend <- 0 + (0.5*min_exon_length)
+      }  
+      print(SNP_df)
+      
+      # if SNP falls outside of cluster then annotate the distance to the edge of the cluster in kb
+      # danger of SNP overlapping exactly with a coord
+      intron_coords <- coords[ names(coords) != as.character(SNP_pos) | duplicated( names(coords) ) ]
+      
+      if( all(snp_coord > intron_coords) | all(snp_coord < intron_coords) ){
+        # find smallest distance
+        distance <- abs( snp_coord - intron_coords)
+        adjacent_coord <- intron_coords[which( distance == min(distance)) ]
+        
+        # make a df
+        relative_coords <- as.numeric( c( snp_coord, adjacent_coord))
+        absolute_coords <- as.numeric( c( names(snp_coord), names(adjacent_coord)))
+        snp_distance_df <- data.frame(
+          x = min( relative_coords ),
+          xend = max( relative_coords ),
+          label = paste0( signif( (max( absolute_coords ) - min( absolute_coords ) )/1000, 3),"kb" ),
+          label_pos = mean( relative_coords )
+        )
+      }else{
+        print(snp_coord)
+        print(intron_coords)
+        # if SNP is within cluster, plot distance to nearest junction in bp
+        distance <- abs( snp_coord - intron_coords)
+        adjacent_coord <- intron_coords[which( distance == min(distance)) ]
+        relative_coords <- as.numeric( c( snp_coord, adjacent_coord))
+        absolute_coords <- as.numeric( c( names(snp_coord), names(adjacent_coord)))
+        snp_distance_df <- data.frame(
+          x = min( relative_coords ),
+          xend = max( relative_coords ),
+          label = paste0( ( (max( absolute_coords ) - min( absolute_coords ) ) ),"bp" ),
+          label_pos = mean( relative_coords )
+        )
+        
+        
+      } 
+
+      # add SNP to plot
       for (i in 1:length(plots) ){ 
         plots[[i]] <- plots[[i]] +  
           geom_segment(data=SNP_df,aes(x=x,y=y,xend=xend,yend=yend, colour = label), size = 6.5 ) +
-          scale_colour_manual("", values = mainPalette ) #+geom_vline(xintercept=snp_coord)
-    }
-    for (i in 1:( length(plots) - 1) ){
-    plots[[i]] <- plots[[i]] + 
-      guides(colour=FALSE) 
-    }
-    plots[[length(plots)]] <- plots[[length(plots)]] + 
-      theme(legend.position="bottom", legend.justification = 'right') 
-    if( length( plots ) == 2){
-    gridExtra::grid.arrange( plots[[1]], plots[[2]], ncol =1)
-    }
-    if( length( plots ) == 3){
-      gridExtra::grid.arrange( plots[[1]], plots[[2]], plots[[3]], ncol =1)
-    }
+          scale_colour_manual("", values = mainPalette ) + geom_vline(xintercept=snp_coord, linetype = 3, colour = SNP_colour)
+      }
+      
+      # add distance arrow to plot
+      plots[[length(plots)]] <- plots[[ length(plots)]] +
+        geom_segment(data = snp_distance_df, 
+                     aes( x = x, xend = xend, y = 0.3*YLIMN, yend = 0.3*YLIMN),
+                     colour = "black", 
+                     arrow = arrow(ends = "both", type = "open", angle = 20, length = unit(0.075, units = "inches") ) ) +
+        geom_text( data = snp_distance_df, aes( x = label_pos, y = 0.45*YLIMN, label = label))
+      
+      
+      for (i in 1:( length(plots) - 1) ){
+        plots[[i]] <- plots[[i]] + 
+        guides(colour=FALSE) 
+      }
+      plots[[length(plots)]] <- plots[[length(plots)]] + 
+        theme(legend.position="bottom", legend.justification = 'right') 
+    
+      # arranging
+      if( length( plots ) == 2){
+        gridExtra::grid.arrange( plots[[1]], plots[[2]], ncol =1)
+      }
+      if( length( plots ) == 3){
+        gridExtra::grid.arrange( plots[[1]], plots[[2]], plots[[3]], ncol =1)
+      }
   }
 
   }

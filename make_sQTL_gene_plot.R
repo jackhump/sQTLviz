@@ -508,7 +508,7 @@ make_gene_plot <- function(gene_name,
                                       curvature=curv,lineend="round") +
             geom_curve(data=allEdges, aes(x = start, xend = end, y = 0, yend = 0, group = Group, color=factor(clu == clusterID), size = curveMax),
                        curvature=-curv,lineend="round" ) +
-            scale_colour_manual("",labels = c(FALSE,TRUE), values = c("gray", "firebrick2") ) +
+            scale_colour_manual("", breaks = c(TRUE, FALSE), limits = c(TRUE, FALSE), values = c("firebrick2", "gray") ) +
             guides(colour=FALSE) 
           
         }
