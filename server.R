@@ -118,7 +118,7 @@ shinyServer(function(input, output) {
     cluster_pos <- resultsToPlot[ sel, ]$cluster_pos
     # get the most significant junction in the selected cluster
     junction <- sigJunctions[ sigJunctions$clu == row.names(resultsToPlot)[sel], ]
-    junction <- junction[ which( junction$bpval == min(junction$bpval) ), ]$pid
+    junction <- junction[ which( junction$bpval == min(junction$bpval) ), ]$pid # causing problems - what is pid?
     return(list(gene = gene, SNP=SNP, SNP_pos=SNP_pos, cluster_pos = cluster_pos, clusterID = clusterID, width = "auto", junction=junction) )
   })
   

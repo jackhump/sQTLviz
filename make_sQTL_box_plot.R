@@ -37,9 +37,15 @@ make_sQTL_box_plot <- function(
   snp_pos=NA,
   snp = snp ){
   
+  print("HELLO JACK")
+  print(junction_to_plot)
+  
+  print(snp)
+  
   stopifnot( snp %in% vcf_meta$SNP ) 
   
   # sometimes chr is missing
+  
   if( !grepl("^chr", junction_to_plot)){
     junction_to_plot <- paste0("chr", junction_to_plot)
   }
@@ -61,6 +67,7 @@ make_sQTL_box_plot <- function(
   
   #print(group_names)
   y <- t(counts[ cluster_ids==cluster_to_plot, ])
+  
   # for each sample divide each junction count by the total for that sample
   normalisedCounts <- as.data.frame(sweep(y, 1, rowSums(y), "/"))
   
@@ -70,8 +77,12 @@ make_sQTL_box_plot <- function(
   normalisedCounts <- normalisedCounts[ complete.cases(normalisedCounts),]
   
   normalisedCounts$genotype <- names(group_names)[ match(normalisedCounts$genotypeCode, group_names)]
-  toPlot <- select( normalisedCounts, junction = junction_to_plot, geno =  "genotype")
+  
+  toPlot <- select( normalisedCounts, 
+                    junction = junction_to_plot,
+                    geno =  "genotype")
   toPlot$geno <- factor(toPlot$geno, levels = rev(names(group_names)))
+  
   plot <- ggplot( data = toPlot, aes(x = geno, y = junction, group = geno ) ) + 
     geom_boxplot(outlier.colour = NA, fill = "orange") +
     geom_quasirandom(size = 0.8) + #coord_flip() +

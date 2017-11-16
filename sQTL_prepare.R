@@ -7,8 +7,38 @@ library(stringr)
 setwd("/Users/Jack/Documents/SQTL_LeafViz/")
 
 permutation_res <- "data/permutations.all.CMC.txt.gz.0.05.bh.txt"
+# Yang now wants all associations at P < 1e-5
+#permutation_res <- "data/permutations.all.CMC.p0.00001.txt"
+
+# other files
 VCF = "data/genotypes_MAF1.vcf.gz"
 clusters_table <- "data/CMC_perind_numers.counts_renamed.gz" # now just the counts - don't need to strip ratios
+
+#####
+# 35 SNPs from Nalls et al 
+## present the top SNP x cluster associations
+######
+
+GWAS_SNPs <- "data/PD_GWAS_SNPs.txt"
+GWAS <- read.table(GWAS_SNPs, header=TRUE, stringsAsFactors = FALSE)
+
+gwas_snps <- GWAS$SNP.orig
+
+GWAS_SNP_associations <- "data/PD_SNPs_associations.all.CMC.txt"
+
+gwas_assoc <- read.table(GWAS_SNP_associations,header=FALSE, stringsAsFactors = FALSE)
+
+gwas_assoc <- gwas_assoc %>%
+              mutate( SNP = str_split_fixed(V2, "\\.", 3)[,1] ) %>%
+              filter( SNP %in% gwas_snps ) %>%
+              rename( "cluster" = V1, "SNP_full" = V2, "P" = V4 )
+
+top_gwas_assoc <- group_by(gwas_assoc, SNP) %>%
+                  summarise( P = min(P) ) %>%
+                  left_join( gwas_assoc, by = c("SNP", "P" ) )
+# for finding in VCF
+gwas_full_snps <- top_gwas_assoc$SNP_full
+gwas_clusters <- str_split_fixed(top_gwas_assoc$cluster, "\\:", 4)[,4]
 
 # PRE-REQUISITES:
 
@@ -21,7 +51,6 @@ fiveprime_file <- paste0( annotation_code,"_fiveprime.bed.gz")
 
 exons_table <- if (!is.null( exon_file )) {
   cat("Loading exons from",exon_file,"\n")
-  #read_table(exon_file)
   as.data.frame(fread(paste("zless",exon_file)) )
 } else {
   cat("No exon_file provided.\n")
@@ -41,26 +70,41 @@ if( !file.exists(system("which bedtools", intern=TRUE) )){
 
 # read in clusters
 #clusters <- as.data.frame(fread(paste("zless", clusters_table), sep = " ", row.names = 1,  header = TRUE, stringsAsFactors = FALSE) )
+
 print("reading in clusters")
 clusters <- read.table(clusters_table, header=TRUE)
+
 # find and harmonise sample names
 samples <- names(clusters)[2:ncol(clusters)]
 
 #convert sample names 
 samples <- gsub( "merged_", "", gsub( "_RNA_PFC", "", samples ) ) 
 names(clusters)[2:ncol(clusters)] <- samples
+
 # write out samples
 samples_file <- "used_samples.txt"
 write.table(samples, samples_file, col.names = FALSE, row.names = FALSE, quote = FALSE)
+
 # read in junction x snp results
 print("reading in results")
+# q < 0.05
 res <- as.data.frame(fread(permutation_res, header =TRUE), stringsAsFactors = FALSE)
-
 genotypes <- unique(res$dummy2)
-genotypes_file <- "sig_snps.txt"
-write.table(genotypes, genotypes_file, col.names = FALSE, row.names = FALSE, quote = FALSE)
 
+# p < 1e-5
+#res <- as.data.frame(fread(permutation_res, header =FALSE), stringsAsFactors = FALSE)
+#genotypes <- unique(res$V6)
+
+
+# add in Nalls' GWAS SNPs
+genotypes <- c(genotypes, gwas_full_snps)
+
+genotypes_file <- "data/sig_snps_plus_GWAS_snps.txt"
+write.table(genotypes, file = genotypes_file, col.names = FALSE, row.names = FALSE, quote = FALSE)
+
+######
 # PREPARE GENOTYPES
+######
 
 # use vcftools to filter out just the snps and samples required
 print("filtering VCF")
@@ -81,13 +125,19 @@ get_vcf_meta <- function(vcf){
 }
 vcf_meta <- get_vcf_meta(vcf)
 
+##################
 # PREPARE CLUSTERS
+##################
 
+# from significant associations
 sigClusters <- str_split_fixed(res[,1], ":",4)[,4]
+# add Nalls' GWAS SNP clusters
+sigClusters <- c(sigClusters, gwas_clusters)
+
 introns <- get_intron_meta(row.names(clusters) )
 keepClusters <- match(introns$clu,sigClusters)
 
-# remove non-significant clusters
+# remove non-significant (or non-GWAS SNP-associated) clusters
 introns <- introns[ !is.na(keepClusters),]
 clusters <- clusters[ !is.na(keepClusters),]
 
@@ -98,16 +148,38 @@ clusters <- clusters[, samples]
 introns_to_plot <- get_intron_meta(row.names(clusters))
 #row.names(clusters) <- clusters$chrom; clusters$chrom <- NULL
 
-## if counts are fractions then split off just the numerator
-### TODO - make this optional
-# now using CMC_perind_numers.counts.gz - no need for this
-# clusters[,2:ncol(clusters)] <- as.data.frame( apply( clusters[,2:ncol(clusters)], MAR = c(1,2), FUN = function(x){
-#   num <- str_split_fixed(x, "/",2)[,1]
-#   return( as.numeric(as.character(num) ) )
-# }) )
+####################
+# ANNOTATE JUNCTIONS
+####################
+
+# functions now in separate script
+source("sQTLviz/sQTL_annotation_functions.R")
+
+intersects <- intersect_introns(introns)
+threeprime_intersect <- intersects[[1]]
+fiveprime_intersect <- intersects[[2]]
+all.introns_intersect <- intersects[[3]]
+
+print("Annotating junctions")
+
+uniqueClusters <- unique( introns$clu ) 
+#uniqueClusters <- uniqueClusters[7010:7020]
+#annotatedClusters <- lapply( seq_along(uniqueClusters),
+#                             FUN = function(i) annotate_single_cluster(introns, clu = uniqueClusters[i], cluIndex = i) )
+#annotatedClusters <- do.call(rbind, annotatedClusters)
+
+# replace with purrr?
+annotatedClusters <- purrr::map_df( seq_along(uniqueClusters),
+                                    ~annotate_single_cluster( introns, clu = uniqueClusters[.], cluIndex = .  ) )
+
+annotatedClusters$gene[ is.na( annotatedClusters$gene) ] <- "."
+annotatedClusters$ensemblID[ is.na( annotatedClusters$ensemblID) ] <- "."
 
 
+#################
 # PREPARE RESULTS
+#################
+
 get_snp_meta <- function(snps){
   snp_meta <-  as.data.frame(str_split_fixed(snps, "\\.", 3), stringsAsFactors = FALSE)
   colnames(snp_meta) <- c("snp_ID", "snp_chr", "snp_pos")
@@ -121,9 +193,33 @@ get_snp_meta <- function(snps){
   snp_meta$snp_pos <- as.numeric(snp_meta$snp_pos)
   return(snp_meta)
 }
-## the results table should consist of a list of clusters with their most significant SNP
-sigJunctions <- cbind( get_intron_meta( res$pid), res, get_snp_meta(res$dummy2))
 
+## the results table should consist of a list of clusters with their most significant SNP
+# bind intron_meta, intron, snp, p value, snp_meta
+#sigJunctions <- cbind( get_intron_meta( res[,1]), res[, c(1,6,11)], get_snp_meta(res[,6]))
+
+# use associations with q < 0.05 cut-off. 
+# Bind together metadata with original results
+sigJunctions <- cbind( get_intron_meta( res[,1]), 
+                       res[, c(1,2,3)],
+                       get_snp_meta(res[,2]))
+
+# create identical table for GWAS junctions
+NallsJunctions <- cbind( get_intron_meta(top_gwas_assoc$cluster),
+                         top_gwas_assoc$cluster,
+                         top_gwas_assoc$SNP_full,
+                         top_gwas_assoc$P,
+                         get_snp_meta(top_gwas_assoc$SNP_full))
+
+# bind together - all will be accessible in same table
+names(NallsJunctions) <- names(sigJunctions)
+sigJunctions <- rbind(sigJunctions, NallsJunctions)
+# sometimes there will be duplicates - remove!
+sigJunctions <- dplyr::distinct(sigJunctions)
+
+#names(sigJunctions)[8] <- "bpval"
+
+# present most significant junction for each SNP
 resultsByCluster <- dplyr::group_by(sigJunctions[order(sigJunctions$bpval),], clu) %>% 
     dplyr::summarise( chr = first(chr),
                       start = min(start),
@@ -135,199 +231,21 @@ resultsByCluster <- dplyr::group_by(sigJunctions[order(sigJunctions$bpval),], cl
     dplyr::arrange(FDR)
 
 
-# for testing only - generate UCSC link
-## genome.ucsc.edu/cgi-bin/hgTracks?&org=human&db=hg19&position=chr5:96075822-96076970&hgFind.matches=rs7724759
-# pmin and pmax are vectorised 
-# starts <- pmin( resultsByCluster$start, resultsByCluster$pos - 100)
-# ends <- pmax( resultsByCluster$end, resultsByCluster$pos + 100)
-# URLS <- paste0( "http://genome.ucsc.edu/cgi-bin/hgTracks?&org=human&db=hg19&position=chr", 
-#                 resultsByCluster$chr,":",starts,"-", ends,"&hgFind.matches=", resultsByCluster$snp  )
-
-# ANNOTATE JUNCTIONS
-intersect_introns <- function(introns){
-  all.introns <- introns
-  all.introns$start <- as.numeric(all.introns$start)
-  all.introns$end <- as.numeric(all.introns$end)
-  
-  
-  # for each splice site write out a bed file  
-  all.junctions <- dplyr::select(all.introns, chr, start, end, clusterID = clu)
-  
-  all.fiveprime <- data.frame( chr = all.introns$chr,
-                               start = all.introns$start,
-                               end = all.introns$start + 1,
-                               clusterID = all.introns$clu)
-  all.threeprime <- data.frame( chr = all.introns$chr,
-                                start = all.introns$end,
-                                end = all.introns$end + 1,
-                                clusterID = all.introns$clu)
-  all.file <- "all_junctions.bed"
-  all.fiveprime.file <- "all_fiveprime.bed"
-  all.threeprime.file <- "all_threeprime.bed"
-  
-  write.table( all.junctions, all.file, col.names = FALSE, row.names = FALSE, quote = FALSE, sep = "\t" )
-  write.table( all.threeprime, all.threeprime.file, col.names = FALSE, row.names = FALSE, quote = FALSE, sep = "\t" )
-  write.table( all.fiveprime, all.fiveprime.file, col.names = FALSE, row.names = FALSE, quote = FALSE, sep = "\t" )
-  
-  print( "BedTools intersect junctions with list of known splice sites")
-  # first match junctions 
-  all.introns.cmd <- paste0("bedtools intersect -a ", all.file, " -b ", all_introns, " -wa -wb -loj -f 1" )
-  
-  all.introns_intersect <- fread(all.introns.cmd)
-  
-  # intersect with bedtools to find the annotations of each splice site
-  threeprime.cmd <- paste0( "bedtools intersect -a ", all.threeprime.file, " -b ",threeprime_file, " -wa -wb -loj -f 1" )
-  
-  threeprime_intersect <- fread(threeprime.cmd)
-  
-  fiveprime.cmd <- paste0( "bedtools intersect -a ", all.fiveprime.file, " -b ", fiveprime_file, " -wa -wb -loj -f 1" )
-  
-  fiveprime_intersect <- fread(fiveprime.cmd)
-  
-  # remove temporary files
-  rm.cmd <- paste("rm ", all.file, all.fiveprime.file, all.threeprime.file) 
-  system(rm.cmd)
-  
-  return( list(threeprime_intersect, fiveprime_intersect,all.introns_intersect))
-}
-
-intersects <- intersect_introns(introns)
-threeprime_intersect <- intersects[[1]]
-fiveprime_intersect <- intersects[[2]]
-all.introns_intersect <- intersects[[3]]
-print("Annotating junctions")
-  
-annotate_single_cluster <- function(introns, clu, cluIndex){
-    #print(clu)
-    # for each intron in the cluster, check for coverage of both
-    # output a vector of string descriptions 
-    cluster <- introns[ introns$clu == clu , ]
-    cluster$start <- as.integer(cluster$start)
-    cluster$end <- as.integer(cluster$end)
-    # subset intersects by clusterID (V4)
-    fprimeClu <- fiveprime_intersect[ V4 == clu,]
-    tprimeClu <- threeprime_intersect[ V4 == clu,]
-    bothSSClu <- all.introns_intersect[ V4 == clu,]
-    # for each intron in the cluster:
-    #   create vector of overlapping splice sites, indexed by the row of the intersect
-    # five prime splice sites
-    fprime <- apply( cluster, MAR = 1, FUN = function(x) {
-      chr <- which( names(cluster) == "chr" )
-      start <- which( names(cluster) == "start" )
-      fprimeClu[   
-        V1 == x[chr] & 
-          V2 == as.numeric( x[start] ),]
-    } )
-    # three prime splice sites
-    tprime <- apply( cluster, MAR = 1, FUN = function(x) {
-      chr <- which( names(cluster) == "chr" )
-      end <- which( names(cluster) == "end" )
-      tprimeClu[   
-        V1 == x[chr] & 
-        V2 == as.numeric( x[end] ),]
-    } )
-    
-    # both splice sites
-    bothSS <-  apply( cluster, MAR = 1, FUN = function(x) {
-      chr <- which( names(cluster) == "chr" )
-      start <- which(names(cluster) == "start")
-      end <- which( names(cluster) == "end" )
-      
-      bothSSClu[   
-        V6 == as.numeric( x[start] ) &
-        V7 == as.numeric( x[end] ) ,]
-    } )
-    
-    # find gene and ensemblID by the most represented gene among all the splice sites
-    cluster_genes <- names(sort(table(do.call( what = rbind, tprime )$V8), decreasing = TRUE ))
-    
-    cluster_gene <- cluster_genes[ cluster_genes != "." ][1]
-    # if no cluster gene found then leave as "."
-    if( length(cluster_gene) == 0){
-      cluster_gene == "."
-    }
-    # do the same for EnsemblID
-    cluster_ensemblIDs <- names(sort(table(do.call( what = rbind, tprime )$V9), decreasing = TRUE ))
-    cluster_ensemblID <- cluster_ensemblIDs[ cluster_ensemblIDs != "." ][1]
-    if( length( cluster_ensemblID ) == 0 ){
-      cluster_ensemblID == "."
-    }
-    
-    verdict <- c()
-    coord <- c()
-    gene <- c()
-    ensemblID <- c()
-    transcripts <- list() 
-    
-    for( intron in 1:nrow(cluster) ){
-      coord[intron] <- paste0(cluster[intron,]$chr,":", cluster[intron,]$start,"-", cluster[intron,]$end )
-      
-      gene[intron] <- cluster_gene
-      ensemblID[intron] <- cluster_ensemblID
-      
-      # for each intron create vector of all transcripts that contain both splice sites
-      #transcripts[[intron]] <- unique( intersect( tprime[[intron]]$V10, fprime[[intron]]$V10 ) ) 
-      
-      verdict[intron] <- "error"
-      if( # if neither are annotated
-        all( tprime[[intron]]$V5 == ".") & all( fprime[[intron]]$V5 == "." )
-      ){ verdict[intron] <- "cryptic_unanchored"
-      }
-      if( # if only one is annotated
-        all( tprime[[intron]]$V5 == ".") & all( fprime[[intron]]$V5 != "." )
-      ){ verdict[intron] <- "cryptic_threeprime"
-      }
-      if(
-        all( tprime[[intron]]$V5 != ".") & all( fprime[[intron]]$V5 == "." )
-      ){ verdict[intron] <- "cryptic_fiveprime"
-      }
-      if( # if both splice sites are annotated
-        all( tprime[[intron]]$V5 != "." ) & all( fprime[[intron]]$V5 != "." )
-      ){ 
-        # test if the splice sites are paired in a known intron
-        if( all(bothSS[[intron]]$V5 != ".") ){
-          verdict[intron] <- "annotated"
-        }else{ # both are annotated but never in the same junction
-          verdict[intron] <- "novel annotated pair"
-        }
-      }
-
-    }
-    if( cluIndex %% 500 == 0 ){
-      print( paste("processed", cluIndex, "clusters" ))
-    }
-    #print(clu)
-    
-    return(
-      data.frame(
-        clusterID = clu,
-        coord = coord,
-        gene = gene,
-        ensemblID = ensemblID,
-        verdict = verdict,
-        stringsAsFactors = FALSE)
-    )
-}
-
-uniqueClusters <- unique( introns$clu ) 
-#uniqueClusters <- uniqueClusters[7010:7020]
-annotatedClusters <- lapply( 1:length(uniqueClusters), FUN = function(i) annotate_single_cluster(introns, clu = uniqueClusters[i], cluIndex = i) )
-annotatedClusters <- do.call(rbind, annotatedClusters)
-
-annotatedClusters$gene[ is.na( annotatedClusters$gene) ] <- "."
-annotatedClusters$ensemblID[ is.na( annotatedClusters$ensemblID) ] <- "."
-
+####
+## PREPARE FOR SHINY
+####
 
 code <- "test"
 annotation_code <- "gencode_hg19"
 
 resultsByCluster$gene <- annotatedClusters$gene[ match(resultsByCluster$clu, annotatedClusters$clusterID)]
-
 resultsByCluster$SNP_pos <- paste0(resultsByCluster$snp_chr, ":", resultsByCluster$pos)
+
 # fix coords without "chr"
 if( all( !grepl("chr", sample(resultsByCluster$chr, 100)) ) ){
   resultsByCluster$chr <- paste0("chr", resultsByCluster$chr)
 }
+
 resultsByCluster$cluster_pos = paste0(resultsByCluster$chr,":", resultsByCluster$start,"-",resultsByCluster$end)
 
 resultsToPlot <- as.data.frame( select( resultsByCluster,
@@ -336,14 +254,23 @@ resultsToPlot <- as.data.frame( select( resultsByCluster,
                            cluster_pos,
                            q = FDR
 ) )
+
 row.names(resultsToPlot) <- resultsByCluster$clu
 resultsToPlot$q <- signif(resultsToPlot$q,  digits = 3)
+
+# create separate table for Nalls results
+
+GWAS_metadata <- read.table("data/PD_GWAS_SNPs.txt", header=TRUE, stringsAsFactors = FALSE)
+GWASresults <- filter(resultsToPlot, SNP %in% NallsJunctions$snp_ID ) %>%
+    mutate( "GWAS p" = GWAS_metadata$P.joint[ match( SNP, GWAS_metadata$SNP.orig)] ) %>%
+  select( "GWAS p", everything() )
 
 save.image("data/all_data.Rdata")
 print("saving objects")
 save( annotatedClusters, # every junction needed
       sigJunctions, # every junction x SNP interaction
       resultsToPlot, #significant clusters and the most significant SNP
+      GWASresults, # associations with SNPs from a PD GWAS
       clusters, # junction counts for each sample
       vcf,# the genotypes of each sample
       vcf_meta, # the vcf metadata
