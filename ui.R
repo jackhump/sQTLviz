@@ -45,6 +45,13 @@ shinyUI(fluidPage(
     #HTML("<img id=logo src=squirtle.png>"),
     h1("sQTLviz", id = "title")
     ),
+    
+    selectInput(inputId = "datasetChoice",
+                label = "Which dataset?", 
+                choices = list("Yang SNPs" = "YangResults",
+                            "PD GWAS SNPs" = "GWASresults",
+                            "SQTLs" = "resultsToPlot") ),
+    
     fluidRow(
       column(8,offset=2,
         div(

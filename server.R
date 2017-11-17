@@ -76,10 +76,19 @@ source("make_sQTL_box_plot.R")
 # 
 # # Define server logic required to draw a histogram
 shinyServer(function(input, output) {
-
+  
+  # Three different selections:
+  # 1) PD GWAS SNPs
+  # 2) Yang's TWAS SNPs
+  # 3) All SNPs in the sQTL analysis
+  
+  #output$resultsTable <-
+  
   # ALL CLUSTER X SNP TABLE
   output$all_clusters <- DT::renderDataTable({
-    datatable( resultsToPlot,
+    subsetChoice <- eval(parse(text=input$datasetChoice) )
+    df <- subset(resultsToPlot, row.names(resultsToPlot) %in% row.names(subsetChoice) )
+    datatable( df,
                 rownames = FALSE,
                # #escape=FALSE,
                # #colnames = c('Genomic location'='coord','Gene'='gene','N'='N','Annotation'='annotation','q'='FDR'),
@@ -103,19 +112,24 @@ shinyServer(function(input, output) {
     print(paste0("VALUE: ", values$default ))
   })
   
+  # SECOND REACTIVE VALUE - HOW TO SUBSET TABLE
+  
+  
   # USE REACTIVE VALUE TO GENERATE ALL VARIABLES NEEDED
   
   mydata <- eventReactive(values$default,{
+    subsetChoice <- eval(parse(text=input$datasetChoice) )
+    df <- subset(resultsToPlot, row.names(resultsToPlot) %in% row.names(subsetChoice) )
     sel <- values$default
     print(sel)
-    gene  <- resultsToPlot[ sel, ]$gene
-    SNP <- resultsToPlot[ sel, ]$SNP
-    SNP_pos <- resultsToPlot[ sel, ]$SNP_pos
+    gene  <- df[ sel, ]$gene
+    SNP <- df[ sel, ]$SNP
+    SNP_pos <- df[ sel, ]$SNP_pos
     #gene <- gsub("<.*?>", "", gene) # strip out html italic tags
     #width <- getGeneLength(gene)
-    clusterID <- row.names(resultsToPlot)[sel]
+    clusterID <- row.names(df)[sel]
     print(clusterID)
-    cluster_pos <- resultsToPlot[ sel, ]$cluster_pos
+    cluster_pos <- df[ sel, ]$cluster_pos
     # get the most significant junction in the selected cluster
     junction <- sigJunctions[ sigJunctions$clu == row.names(resultsToPlot)[sel], ]
     junction <- junction[ which( junction$bpval == min(junction$bpval) ), ]$pid # causing problems - what is pid?

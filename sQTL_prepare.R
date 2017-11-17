@@ -25,7 +25,6 @@ GWAS <- read.table(GWAS_SNPs, header=TRUE, stringsAsFactors = FALSE)
 gwas_snps <- GWAS$SNP.orig
 
 GWAS_SNP_associations <- "data/PD_SNPs_associations.all.CMC.txt"
-
 gwas_assoc <- read.table(GWAS_SNP_associations,header=FALSE, stringsAsFactors = FALSE)
 
 gwas_assoc <- gwas_assoc %>%
@@ -39,6 +38,22 @@ top_gwas_assoc <- group_by(gwas_assoc, SNP) %>%
 # for finding in VCF
 gwas_full_snps <- top_gwas_assoc$SNP_full
 gwas_clusters <- str_split_fixed(top_gwas_assoc$cluster, "\\:", 4)[,4]
+
+#### Yang's Top Two Hits from the TWAS - MAPT and MTOR
+# zgrep for them in all.associations
+Yang_SNPs <- "data/Yang_chosen_SNPs_associations.all.CMC.txt"
+Yang_assoc <- read.table(Yang_SNPs, header=FALSE, stringsAsFactors = FALSE)
+
+Yang_assoc <- Yang_assoc %>%
+  mutate( SNP = str_split_fixed(V2, "\\.", 3)[,1] ) %>%
+  rename( "cluster" = V1, "SNP_full" = V2, "P" = V4 )
+
+top_yang_assoc <- group_by(Yang_assoc, SNP) %>%
+  summarise( P = min(P) ) %>%
+  left_join( Yang_assoc, by = c("SNP", "P" ) )
+
+yang_full_snps <- top_yang_assoc$SNP_full
+yang_clusters <- str_split_fixed(top_yang_assoc$cluster, "\\:", 4)[,4]
 
 # PRE-REQUISITES:
 
@@ -95,11 +110,10 @@ genotypes <- unique(res$dummy2)
 #res <- as.data.frame(fread(permutation_res, header =FALSE), stringsAsFactors = FALSE)
 #genotypes <- unique(res$V6)
 
+# add in Nalls' GWAS SNPs and Yang's preferred SNPs
+genotypes <- c(genotypes, gwas_full_snps,yang_full_snps)
 
-# add in Nalls' GWAS SNPs
-genotypes <- c(genotypes, gwas_full_snps)
-
-genotypes_file <- "data/sig_snps_plus_GWAS_snps.txt"
+genotypes_file <- "data/sig_snps_plus_GWAS_Yang_snps.txt"
 write.table(genotypes, file = genotypes_file, col.names = FALSE, row.names = FALSE, quote = FALSE)
 
 ######
@@ -131,8 +145,8 @@ vcf_meta <- get_vcf_meta(vcf)
 
 # from significant associations
 sigClusters <- str_split_fixed(res[,1], ":",4)[,4]
-# add Nalls' GWAS SNP clusters
-sigClusters <- c(sigClusters, gwas_clusters)
+# add Nalls' GWAS SNP clusters and Yang's too!
+sigClusters <- c(sigClusters, gwas_clusters, yang_clusters)
 
 introns <- get_intron_meta(row.names(clusters) )
 keepClusters <- match(introns$clu,sigClusters)
@@ -211,15 +225,22 @@ NallsJunctions <- cbind( get_intron_meta(top_gwas_assoc$cluster),
                          top_gwas_assoc$P,
                          get_snp_meta(top_gwas_assoc$SNP_full))
 
+YangJunctions <- cbind( get_intron_meta(top_yang_assoc$cluster),
+                        top_yang_assoc$cluster,
+                        top_yang_assoc$SNP_full,
+                        top_yang_assoc$P,
+                        get_snp_meta(top_yang_assoc$SNP_full))
 # bind together - all will be accessible in same table
 names(NallsJunctions) <- names(sigJunctions)
+names(YangJunctions) <- names(sigJunctions)
 sigJunctions <- rbind(sigJunctions, NallsJunctions)
+sigJunctions <- rbind(sigJunctions, YangJunctions)
 # sometimes there will be duplicates - remove!
 sigJunctions <- dplyr::distinct(sigJunctions)
 
 #names(sigJunctions)[8] <- "bpval"
-
-# present most significant junction for each SNP
+# present most significant junction for each SNP?
+# or most significant SNP for each junction?
 resultsByCluster <- dplyr::group_by(sigJunctions[order(sigJunctions$bpval),], clu) %>% 
     dplyr::summarise( chr = first(chr),
                       start = min(start),
@@ -230,6 +251,7 @@ resultsByCluster <- dplyr::group_by(sigJunctions[order(sigJunctions$bpval),], cl
                       FDR = first(bpval) ) %>%
     dplyr::arrange(FDR)
 
+# for Nalls and Yang SNPs don't thin at all - we want those SNPs!
 
 ####
 ## PREPARE FOR SHINY
@@ -250,7 +272,8 @@ resultsByCluster$cluster_pos = paste0(resultsByCluster$chr,":", resultsByCluster
 
 resultsToPlot <- as.data.frame( select( resultsByCluster,
                            SNP = snp,
-                           SNP_pos,                           gene = gene,
+                           SNP_pos, 
+                           gene = gene,
                            cluster_pos,
                            q = FDR
 ) )
@@ -259,11 +282,50 @@ row.names(resultsToPlot) <- resultsByCluster$clu
 resultsToPlot$q <- signif(resultsToPlot$q,  digits = 3)
 
 # create separate table for Nalls results
-
 GWAS_metadata <- read.table("data/PD_GWAS_SNPs.txt", header=TRUE, stringsAsFactors = FALSE)
-GWASresults <- filter(resultsToPlot, SNP %in% NallsJunctions$snp_ID ) %>%
-    mutate( "GWAS p" = GWAS_metadata$P.joint[ match( SNP, GWAS_metadata$SNP.orig)] ) %>%
-  select( "GWAS p", everything() )
+
+GWASresults <- select(NallsJunctions,
+                      clu,
+                      chr,
+                      start,
+                      end,
+                      SNP = snp_ID,
+                      snp_chr,
+                      pos = snp_pos,
+                      q = bpval # is this really FDR or uncorrected P?
+                      ) %>%
+    mutate( 
+      SNP_pos = paste0(snp_chr, ":", pos),
+      cluster_pos = paste0("chr", chr, ":", start, "-", end),
+      gene = annotatedClusters$gene[ match(clu, annotatedClusters$clusterID)],
+      "GWAS p" = GWAS_metadata$P.joint[ match( SNP, GWAS_metadata$SNP.orig)],
+      q <- signif(q,  digits = 3)
+      ) %>%
+  select( "GWAS p", SNP, SNP_pos, gene, cluster_pos, q) %>%
+ # arrange("GWAS p") %>%
+  as.data.frame(stringsAsFactors = FALSE)
+row.names(GWASresults) <- NallsJunctions$clu
+
+YangResults <- select(YangJunctions,
+                       clu,
+                       chr,
+                       start,
+                       end,
+                       SNP = snp_ID,
+                       snp_chr,
+                       pos = snp_pos,
+                       q = bpval # is this really FDR or uncorrected P?
+) %>%
+  mutate( 
+    SNP_pos = paste0(snp_chr, ":", pos),
+    cluster_pos = paste0("chr", chr, ":", start, "-", end),
+    gene = annotatedClusters$gene[ match(clu, annotatedClusters$clusterID)],
+    q <- signif(q,  digits = 3)
+  ) %>%
+  select( SNP, SNP_pos, gene, cluster_pos, q) %>%
+  # arrange("GWAS p") %>%
+  as.data.frame(stringsAsFactors = FALSE)
+row.names(YangResults) <- YangJunctions$clu
 
 save.image("data/all_data.Rdata")
 print("saving objects")
@@ -271,6 +333,7 @@ save( annotatedClusters, # every junction needed
       sigJunctions, # every junction x SNP interaction
       resultsToPlot, #significant clusters and the most significant SNP
       GWASresults, # associations with SNPs from a PD GWAS
+      YangResults, # associations with Yang's TWAS hit SNPs
       clusters, # junction counts for each sample
       vcf,# the genotypes of each sample
       vcf_meta, # the vcf metadata
