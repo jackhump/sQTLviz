@@ -3,10 +3,24 @@ library(data.table)
 #library(vcfR)
 library(leafcutter)
 library(stringr)
+library(readr)
 
 setwd("/Users/Jack/Documents/SQTL_LeafViz/")
 
 permutation_res <- "data/permutations.all.CMC.txt.gz.0.05.bh.txt"
+
+
+# add in full permutation results to get Beta for each junction
+permutation_full_res <- "data/permutations.all.CMC.txt.gz"
+perm_full <- read_delim( permutation_full_res,
+                         col_names = c("clusterID", "V2","V3","V4","V5","SNP","V7","V8","Beta","V10","FDR"),
+                         delim = " "
+)
+perm_clean <- select(perm_full, clusterID, SNP, Beta, FDR)
+perm_clean <- cbind( perm_clean,
+                     get_intron_meta(perm_full$clusterID),
+                     get_snp_meta(perm_full$SNP))
+
 # Yang now wants all associations at P < 1e-5
 #permutation_res <- "data/permutations.all.CMC.p0.00001.txt"
 
@@ -298,10 +312,10 @@ GWASresults <- select(NallsJunctions,
       SNP_pos = paste0(snp_chr, ":", pos),
       cluster_pos = paste0("chr", chr, ":", start, "-", end),
       gene = annotatedClusters$gene[ match(clu, annotatedClusters$clusterID)],
-      "GWAS p" = GWAS_metadata$P.joint[ match( SNP, GWAS_metadata$SNP.orig)],
+      "GWAS P" = GWAS_metadata$P.joint[ match( SNP, GWAS_metadata$SNP.orig)],
       q <- signif(q,  digits = 3)
       ) %>%
-  select( "GWAS p", SNP, SNP_pos, gene, cluster_pos, q) %>%
+  select( "GWAS P", SNP, SNP_pos, gene, cluster_pos, q) %>%
  # arrange("GWAS p") %>%
   as.data.frame(stringsAsFactors = FALSE)
 row.names(GWASresults) <- NallsJunctions$clu
@@ -327,6 +341,26 @@ YangResults <- select(YangJunctions,
   as.data.frame(stringsAsFactors = FALSE)
 row.names(YangResults) <- YangJunctions$clu
 
+# junction table - each junction with Beta, P value and annotation
+junctionTable <- resultsToPlot %>%
+  mutate( clu = row.names(resultsToPlot) ) %>%
+  left_join(introns_to_plot, by = "clu" ) %>%
+  rename(snp_ID = SNP) %>%
+  left_join( perm_clean, 
+             by = c("chr" = "snp_chr", "start", "end", "snp_ID", "clu", "middle")
+  ) %>%
+  mutate(coord = paste0( chr, ":", start, "-", end)) %>%
+  left_join( annotatedClusters, 
+             by = c("clu" = "clusterID", "coord" )
+  ) %>%
+  select(clu, coord, verdict, Beta, q = FDR) %>%
+  mutate( Beta = signif(Beta, digits = 3),
+          q = signif(q, digits = 3)) %>%
+  mutate( Beta = ifelse(is.na(Beta), ".", Beta),
+          q = ifelse(is.na(q), ".", q))
+
+
+
 save.image("data/all_data.Rdata")
 print("saving objects")
 save( annotatedClusters, # every junction needed
@@ -341,6 +375,7 @@ save( annotatedClusters, # every junction needed
       #counts, 
       #meta, 
       exons_table, # the annotation
+      junctionTable, # the junctions to display for each cluster
       #pca, 
       #intron_summary, 
       #cluster_summary, 
@@ -349,7 +384,7 @@ save( annotatedClusters, # every junction needed
       #sample_table,
       annotation_code,
       code,
-      file = paste0( "data/sQTL_results.Rdata")
+      file = paste0( "sQTLviz/sQTL_results.Rdata")
 )
 
 # to do - cut down size of exon table to increase speed of querying

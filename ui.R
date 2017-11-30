@@ -4,9 +4,18 @@ library(DT)
 library(shinycssloaders)
 library(shinyjs)
 
-# Define UI for application that draws a histogram
-shinyUI(fluidPage(
-  tags$style(type="text/css", "
+ui <- tagList(
+  useShinyjs(),
+  navbarPage(
+    #title  = actionLink("aboutLink", "LeafViz"),
+    title = "sQTLviz",
+    #title = a(id = "gitLink", href="https://github.com/davidaknowles/leafcutter/tree/master/leafviz","LeafViz", target = "_blank"), 
+    id = "navBarPage",
+    windowTitle = "sQTLviz",
+    tabPanel("CommonMind Consortium sQTLs", 
+             value = "resultsToPlot",
+             # padding-top: 70px
+             tags$style(type="text/css", "
 #UCSC_button {
   margin-top: 10px;
   margin-bottom: 10px;
@@ -37,20 +46,19 @@ shinyUI(fluidPage(
     size:huge;
 }
 
-"),
+")),
+    tabPanel("Li et al TWAS SNPs", value = "YangResults"),
+    tabPanel("Nalls et al PD GWAS SNPs", value = "GWASresults" ),
+    tabPanel("About", value = "NA"),
+    
              
   
   # Application title
   div(id = "titlePanel",
     #HTML("<img id=logo src=squirtle.png>"),
-    h1("sQTLviz", id = "title")
+    h1("sQTLviz: explore splicing QTLs", id = "title")
     ),
     
-    selectInput(inputId = "datasetChoice",
-                label = "Which dataset?", 
-                choices = list("Yang SNPs" = "YangResults",
-                            "PD GWAS SNPs" = "GWASresults",
-                            "SQTLs" = "resultsToPlot") ),
     
     fluidRow(
       column(8,offset=2,
@@ -60,18 +68,33 @@ shinyUI(fluidPage(
       )
     ),
     withSpinner(div(
+      column(7, offset = 1,
+        h3(id = "title", "Whole gene visualization")
+      ),
       div(
-        plotOutput("select_gene_plot",width="100%", height = "200px") 
+        plotOutput("select_gene_plot",width="100%", height = "350px") 
       ),
       fluidRow(
         column(7, offset = 1,
           div(
-           plotOutput("select_cluster_plot", width = "100%", height = 400) 
+            h3(id = "title", "Cluster visualization"),
+            h5(id = "subtitle", "Most significant junction is bolded")
+          ),
+          div(
+           plotOutput("select_cluster_plot", width = "100%", height = "500px") 
           )
         ),
         column(3,
+          h3(id = "title", "Most significant junction"),
           div(
-            plotOutput("select_box_plot", width = "100%", height = 400)
+            plotOutput("select_box_plot", width = "100%", height = "500px")
+          )
+        )
+      ),
+      fluidRow(
+        column(8,offset=2,
+          div(
+        DT::dataTableOutput("junctionTable")
           )
         )
       ),

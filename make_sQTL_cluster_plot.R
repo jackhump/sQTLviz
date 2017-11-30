@@ -138,12 +138,13 @@ make_sQTL_cluster_plot <- function(
   minratio=1.0
   yFactor = 0.65   # originally set as 0.65
   yConstant = -0.25 # originally set as 0.5
-  labelTextSize=3.5 # orignally set as 5
   curveMax = 10
   curveExponent = 2
   yOffset = 0
   centreLineWidth = 3   # horizontal white line to clean up the edges of the curves
-  
+  labelTextSize=5 # orignally set as 5
+  yAxisTextSize = 20
+  legendTextSize = 15
   
   mainPalette <- c(junction_colour, cryptic_colour)
   if( !is.na(snp_pos)){
@@ -313,7 +314,7 @@ make_sQTL_cluster_plot <- function(
       # make the y axis label the group
       #ylab(paste0(groups[fancyVar]," (n=",group_sample_size,")")) +
       ylab(paste0("\n",names(group_names)[fancyVar],"\n(n=",group_sample_size,")")) +
-      theme(axis.title.y = element_text( angle = 0, vjust = 0.75 )) +
+      theme(axis.title.y = element_text( angle = 0, vjust = 0.75, size = yAxisTextSize )) +
       xlab("") +
       xlim(my_xlim) +
       # horizontal line - smooth out the ends of the curves
@@ -512,11 +513,19 @@ make_sQTL_cluster_plot <- function(
   
   #do.call( gridExtra::grid.arrange, c(plots, list(ncol=1)))
   # only if no SNP is present
+  
+  
   if( is.na(snp_pos) ){
+    
+    # add colour legend to bottom-most plot
+    
     plots[[1]] <- plots[[1]] + 
       scale_colour_manual("", values = mainPalette ) + guides(colour=FALSE) # don't show colour legend in top plot
     plots[[2]] <- plots[[2]] +
-      scale_colour_manual("", values = mainPalette ) + theme(legend.position="bottom", legend.justification = 'right') 
+      scale_colour_manual("", values = mainPalette ) + theme(legend.position="bottom", 
+                                                             legend.justification = 'right',
+                                                             legend.text = element_text(size = legendTextSize) 
+                                                             ) 
     
     gridExtra::grid.arrange( plots[[1]], plots[[2]], ncol =1)
   }else{
@@ -582,7 +591,7 @@ make_sQTL_cluster_plot <- function(
                      aes( x = x, xend = xend, y = 0.3*YLIMN, yend = 0.3*YLIMN),
                      colour = "black", 
                      arrow = arrow(ends = "both", type = "open", angle = 20, length = unit(0.075, units = "inches") ) ) +
-        geom_text( data = snp_distance_df, aes( x = label_pos, y = 0.45*YLIMN, label = label))
+        geom_text( data = snp_distance_df, aes( x = label_pos, y = 0.45*YLIMN, label = label), size = labelTextSize)
       
       
       for (i in 1:( length(plots) - 1) ){
@@ -590,7 +599,10 @@ make_sQTL_cluster_plot <- function(
         guides(colour=FALSE) 
       }
       plots[[length(plots)]] <- plots[[length(plots)]] + 
-        theme(legend.position="bottom", legend.justification = 'right') 
+        theme(legend.position="bottom",
+              legend.justification = 'right',
+              legend.text = element_text(size = legendTextSize)
+              ) 
     
       # arranging
       if( length( plots ) == 2){

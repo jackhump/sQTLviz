@@ -1,21 +1,21 @@
-# sel <- 1
-# cluster_to_plot = row.names(resultsToPlot)[sel]
-# # get lowest p value junction in cluster to start
-# all_junctions = sigJunctions
-# junction_to_plot= all_junctions[all_junctions$clu==cluster_to_plot,]
-# junction_to_plot = junction_to_plot[ which( junction_to_plot$bpval == min(junction_to_plot$bpval) ), ]$pid
-#                    main_title = "test"
+#  sel <- 1
+#  cluster_to_plot = row.names(resultsToPlot)[sel]
+#  # get lowest p value junction in cluster to start
+#  all_junctions = sigJunctions
+#  junction_to_plot= all_junctions[all_junctions$clu==cluster_to_plot,]
+#  junction_to_plot = junction_to_plot[ which( junction_to_plot$bpval == min(junction_to_plot$bpval) ), ]$pid
+# #                    main_title = "test"
 #                    vcf=vcf
-#                    vcf_meta=vcf_meta
-#                    exons_table = exons_table
-#                    counts = clusters
-#                    introns = annotatedClusters
-#                    cluster_ids = annotatedClusters$clusterID
-#                    snp_pos = resultsToPlot[sel,]$SNP_pos
-#                    snp = resultsToPlot[sel,]$SNP
+#                     vcf_meta=vcf_meta
+#                     exons_table = exons_table
+#                     counts = clusters
+#                     introns = annotatedClusters
+#                     cluster_ids = annotatedClusters$clusterID
+#                     snp_pos = resultsToPlot[sel,]$SNP_pos
+#                     snp = resultsToPlot[sel,]$SNP
+# # 
+# #                    
 # 
-#                    
-
 
 
 #' Make genotype x junction count box plots
@@ -35,12 +35,13 @@ make_sQTL_box_plot <- function(
   counts = NULL,
   introns = NULL,
   snp_pos=NA,
+  junctionTable = NA,
   snp = snp ){
   
-  print("HELLO JACK")
-  print(junction_to_plot)
+  #print("HELLO JACK")
+  #print(junction_to_plot)
   
-  print(snp)
+  #print(snp)
   
   stopifnot( snp %in% vcf_meta$SNP ) 
   
@@ -81,15 +82,25 @@ make_sQTL_box_plot <- function(
   toPlot <- select( normalisedCounts, 
                     junction = junction_to_plot,
                     geno =  "genotype")
-  toPlot$geno <- factor(toPlot$geno, levels = rev(names(group_names)))
+  toPlot$geno <- factor(toPlot$geno, levels = (names(group_names))) # this was reversed
+  
+  # get junction information for title
+  junc <- mutate(junctionTable,
+                 j = paste0( gsub("-",":", coord),":", clu)
+                 ) %>%
+    filter( j == junction_to_plot )
+  
+  values <- paste( signif(as.numeric(junc$Beta),3)," q =", signif(as.numeric(junc$q),3) )
   
   plot <- ggplot( data = toPlot, aes(x = geno, y = junction, group = geno ) ) + 
     geom_boxplot(outlier.colour = NA, fill = "orange") +
     geom_quasirandom(size = 0.8) + #coord_flip() +
     theme_classic() +
     theme(axis.title.y = element_text( angle = 90 ) ) +
-    ylab("junction contribution to cluster") +
-    xlab("") 
+    ylab("contribution to cluster") +
+    xlab("") +
+    labs(title = junc$coord,
+         subtitle = bquote(beta==.(values)) )
       
   return(plot)
 }

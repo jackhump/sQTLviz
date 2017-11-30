@@ -84,22 +84,48 @@ shinyServer(function(input, output) {
   
   #output$resultsTable <-
   
+  #output$test_text <- renderText({paste0("You are viewing tab \"", input$navBarPage, "\"")})
+  
+  
   # ALL CLUSTER X SNP TABLE
   output$all_clusters <- DT::renderDataTable({
-    subsetChoice <- eval(parse(text=input$datasetChoice) )
+    #subsetChoice <- eval(parse(text=input$datasetChoice) )
+    # clicked tab gives you the thing to subset
+    subsetChoice <- eval(parse(text=input$navBarPage ) )
     df <- subset(resultsToPlot, row.names(resultsToPlot) %in% row.names(subsetChoice) )
+    if( input$navBarPage == "GWASresults"){
+      df <- df %>%
+        mutate("GWAS P" = GWASresults$`GWAS P` ) %>%
+        select("GWAS P", everything() )
+    }
     datatable( df,
                 rownames = FALSE,
                # #escape=FALSE,
                # #colnames = c('Genomic location'='coord','Gene'='gene','N'='N','Annotation'='annotation','q'='FDR'),
                 selection = 'single',
                # caption = "Click on a row to plot the corresponding visualization.  q: Benjamini–Hochberg q-value.",
-                fillContainer = FALSE)# ,
-               # options = list(
-               #   pageLength = 15,
+                fillContainer = FALSE ,
+                options = list(
+                  #TODO: why doesn't this work?
+                  language = list(
+                    searchPlaceholder = "for a SNP or gene..."
+                  )
+                  #   pageLength = 15,
                #   columnDefs = list(list(className = 'dt-center', targets = 0:5) )
-               # )
+                )
+    )
 #) 
+  })
+  
+  # JUNCTION TABLE
+  output$junctionTable <- DT::renderDataTable({
+    jtable <- dplyr::filter(junctionTable, clu == mydata()$clusterID) %>%
+      dplyr::select(-clu)
+    datatable(jtable,
+              escape = FALSE,
+              rownames = FALSE,
+              fillContainer = FALSE,
+              options <- list( searching = FALSE, paging = FALSE, info = FALSE ))
   })
   
   # REACTIVITY
@@ -118,7 +144,7 @@ shinyServer(function(input, output) {
   # USE REACTIVE VALUE TO GENERATE ALL VARIABLES NEEDED
   
   mydata <- eventReactive(values$default,{
-    subsetChoice <- eval(parse(text=input$datasetChoice) )
+    subsetChoice <- eval(parse(text=input$navBarPage) )
     df <- subset(resultsToPlot, row.names(resultsToPlot) %in% row.names(subsetChoice) )
     sel <- values$default
     print(sel)
@@ -131,7 +157,7 @@ shinyServer(function(input, output) {
     print(clusterID)
     cluster_pos <- df[ sel, ]$cluster_pos
     # get the most significant junction in the selected cluster
-    junction <- sigJunctions[ sigJunctions$clu == row.names(resultsToPlot)[sel], ]
+    junction <- sigJunctions[ sigJunctions$clu == row.names(df)[sel], ]
     junction <- junction[ which( junction$bpval == min(junction$bpval) ), ]$pid # causing problems - what is pid?
     return(list(gene = gene, SNP=SNP, SNP_pos=SNP_pos, cluster_pos = cluster_pos, clusterID = clusterID, width = "auto", junction=junction) )
   })
@@ -192,6 +218,7 @@ shinyServer(function(input, output) {
         counts = clusters,
         introns = annotatedClusters,
         cluster_ids = annotatedClusters$clusterID,
+        junctionTable = junctionTable,
         snp_pos = mydata()$SNP_pos,
         snp = mydata()$SNP )
     ))

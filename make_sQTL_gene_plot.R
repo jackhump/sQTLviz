@@ -242,7 +242,7 @@ make_gene_plot <- function(gene_name,
   YLIMN=1000 # 8
   YLIMP=-1000  # -9
   # plot junctions as curves
-  curv = 0.35 # normally 0.5
+  curv = 0.2 # normally 0.5
   curveMax = 0.1
   curveExponent = 2
   yOffset = 0
