@@ -128,7 +128,7 @@ make_sQTL_cluster_plot <- function(
   ############## 
   # PLOT SETTINGS
   ###############
-  min_proportion = 0.01 # if a junction's normalised proportion is less than this then don't plot!
+  min_proportion = 0#.01 # if a junction's normalised proportion is less than this then don't plot!
   min_height=0
   max_height=0
   curv <- 0.1

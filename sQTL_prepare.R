@@ -9,18 +9,6 @@ setwd("/Users/Jack/Documents/SQTL_LeafViz/")
 
 permutation_res <- "data/permutations.all.CMC.txt.gz.0.05.bh.txt"
 
-
-# add in full permutation results to get Beta for each junction
-permutation_full_res <- "data/permutations.all.CMC.txt.gz"
-perm_full <- read_delim( permutation_full_res,
-                         col_names = c("clusterID", "V2","V3","V4","V5","SNP","V7","V8","Beta","V10","FDR"),
-                         delim = " "
-)
-perm_clean <- select(perm_full, clusterID, SNP, Beta, FDR)
-perm_clean <- cbind( perm_clean,
-                     get_intron_meta(perm_full$clusterID),
-                     get_snp_meta(perm_full$SNP))
-
 # Yang now wants all associations at P < 1e-5
 #permutation_res <- "data/permutations.all.CMC.p0.00001.txt"
 
@@ -175,6 +163,26 @@ clusters <- clusters[, samples]
 
 introns_to_plot <- get_intron_meta(row.names(clusters))
 #row.names(clusters) <- clusters$chrom; clusters$chrom <- NULL
+
+# for each cluster work out mean proportion of each junction
+# remove junctions < 1% contribution
+
+juncProp <- function(cluster){
+  cluster$prop <- cluster$meanCount / sum(cluster$meanCount) 
+  return(cluster)
+}
+
+splitClusters <- introns_to_plot %>%
+  mutate( 
+    clu = factor(.$clu, levels = unique(.$clu)),
+    meanCount = rowMeans(clusters) ) %>%
+  split( .$clu ) %>%
+  purrr::map_df( juncProp ) %>%
+  mutate( clu = as.character(.$clu))
+
+introns_to_plot <- introns_to_plot[ splitClusters$prop >= 0.01,]
+clusters <- clusters[ splitClusters$prop >= 0.01,]
+introns <- introns[ splitClusters$prop >= 0.01,]
 
 ####################
 # ANNOTATE JUNCTIONS
@@ -340,6 +348,19 @@ YangResults <- select(YangJunctions,
   # arrange("GWAS p") %>%
   as.data.frame(stringsAsFactors = FALSE)
 row.names(YangResults) <- YangJunctions$clu
+
+# get the Betas and per-junction q values
+# add in full permutation results to get Beta for each junction
+permutation_full_res <- "data/permutations.all.CMC.txt.gz"
+perm_full <- read_delim( permutation_full_res,
+                         col_names = c("clusterID", "V2","V3","V4","V5","SNP","V7","V8","Beta","V10","FDR"),
+                         delim = " "
+)
+perm_clean <- select(perm_full, clusterID, SNP, Beta, FDR)
+perm_clean <- cbind( perm_clean,
+                     get_intron_meta(perm_full$clusterID),
+                     get_snp_meta(perm_full$SNP) )
+
 
 # junction table - each junction with Beta, P value and annotation
 junctionTable <- resultsToPlot %>%

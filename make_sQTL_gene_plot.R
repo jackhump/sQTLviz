@@ -553,6 +553,7 @@ make_gene_plot <- function(gene_name,
       scale_size_continuous(limits=c(0,10),guide='none') + 
       
       ggtitle( paste(gene_name_df$label, collapse = "+") ) +
+      
       theme(plot.title = element_text(face="bold.italic", colour="black", size = 20) ) +
       # EXONS
       geom_segment( data=exon_df, aes(x=x,y=y,xend=xend,yend=yend ), alpha=1, size=6, colour = 'black' )      
